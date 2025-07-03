@@ -22,6 +22,29 @@
 
 .cards > ul > li img {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 4;
   object-fit: cover;
+}
+
+.cards > ul > li a.button {
+  text-overflow: unset;
+  white-space: normal;
+  background-color: unset;
+  color: var(--link-color);
+  display: inline;
+  padding: 0;
+}
+
+.cards > ul > li a.button:hover {
+  color: var(--red);
+  text-decoration: underline;
+}
+
+.cards > ul > li {
+  cursor: pointer;
+}
+
+.cards > ul > li:hover {
+  border-color: var(--red);
+  box-shadow: 0 0 4px var(--red);
 }
