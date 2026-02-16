@@ -84,18 +84,45 @@ class FamilyTree {
     this.data.forEach(record => {
       if (!record.Person) return;
       
-      const anchorId = record.AnchorId || record.Person;
-      if (!this.persons.has(anchorId)) {
-        this.persons.set(anchorId, {
-          id: anchorId,
-          name: record.Person,
-          events: [],
-          children: [],
-          parentId: null
-        });
-      }
+      let anchorId = record.AnchorId;
+      let person = null;
       
-      const person = this.persons.get(anchorId);
+      if (anchorId && anchorId !== '' && anchorId !== null) {
+        // Use provided AnchorId
+        anchorId = String(anchorId);
+        if (!this.persons.has(anchorId)) {
+          this.persons.set(anchorId, {
+            id: anchorId,
+            name: record.Person,
+            events: [],
+            children: [],
+            parentId: null
+          });
+        }
+        person = this.persons.get(anchorId);
+      } else {
+        // No AnchorId - try to find existing person by name
+        const existingPerson = Array.from(this.persons.values()).find(p => 
+          p.name === record.Person
+        );
+        
+        if (existingPerson) {
+          // Use existing person
+          person = existingPerson;
+          anchorId = existingPerson.id;
+        } else {
+          // Create new person using name as ID (fallback)
+          anchorId = record.Person;
+          this.persons.set(anchorId, {
+            id: anchorId,
+            name: record.Person,
+            events: [],
+            children: [],
+            parentId: null
+          });
+          person = this.persons.get(anchorId);
+        }
+      }
       
       // Add event
       const event = {
@@ -121,9 +148,25 @@ class FamilyTree {
           person.parentId = parentId;
         }
       } else if (record.Eltern1) {
-        // Try to find parent by name if no ParentId
+        // Try to find parent by name if no ParentId (check Eltern1 first)
         const parent = Array.from(this.persons.values()).find(p => 
-          p.name === record.Eltern1 || p.name.includes(record.Eltern1)
+          p.name === record.Eltern1 || p.name.includes(record.Eltern1) || record.Eltern1.includes(p.name)
+        );
+        if (parent) {
+          person.parentId = parent.id;
+        } else if (record.Eltern2) {
+          // If Eltern1 doesn't match, try Eltern2
+          const parent2 = Array.from(this.persons.values()).find(p => 
+            p.name === record.Eltern2 || p.name.includes(record.Eltern2) || record.Eltern2.includes(p.name)
+          );
+          if (parent2) {
+            person.parentId = parent2.id;
+          }
+        }
+      } else if (record.Eltern2) {
+        // If no Eltern1, try Eltern2
+        const parent = Array.from(this.persons.values()).find(p => 
+          p.name === record.Eltern2 || p.name.includes(record.Eltern2) || record.Eltern2.includes(p.name)
         );
         if (parent) {
           person.parentId = parent.id;
@@ -139,11 +182,20 @@ class FamilyTree {
           parent.children.push(person);
         } else {
           // Try to find parent by name if ParentId doesn't match
-          const parentName = person.events.find(e => e.parent1)?.parent1;
-          if (parentName) {
-            const parentByName = Array.from(this.persons.values()).find(p => 
-              p.name === parentName || p.name.includes(parentName) || parentName.includes(p.name)
-            );
+          // Check both parent1 and parent2
+          const eventWithParent = person.events.find(e => e.parent1 || e.parent2);
+          if (eventWithParent) {
+            let parentByName = null;
+            if (eventWithParent.parent1) {
+              parentByName = Array.from(this.persons.values()).find(p => 
+                p.name === eventWithParent.parent1 || p.name.includes(eventWithParent.parent1) || eventWithParent.parent1.includes(p.name)
+              );
+            }
+            if (!parentByName && eventWithParent.parent2) {
+              parentByName = Array.from(this.persons.values()).find(p => 
+                p.name === eventWithParent.parent2 || p.name.includes(eventWithParent.parent2) || eventWithParent.parent2.includes(p.name)
+              );
+            }
             if (parentByName && !parentByName.children.find(c => c.id === person.id)) {
               parentByName.children.push(person);
               person.parentId = parentByName.id;
@@ -152,11 +204,20 @@ class FamilyTree {
         }
       } else {
         // Try to find parent by name even if no ParentId
-        const parentName = person.events.find(e => e.parent1)?.parent1;
-        if (parentName) {
-          const parent = Array.from(this.persons.values()).find(p => 
-            p.name === parentName || p.name.includes(parentName) || parentName.includes(p.name)
-          );
+        // Check both parent1 and parent2
+        const eventWithParent = person.events.find(e => e.parent1 || e.parent2);
+        if (eventWithParent) {
+          let parent = null;
+          if (eventWithParent.parent1) {
+            parent = Array.from(this.persons.values()).find(p => 
+              p.name === eventWithParent.parent1 || p.name.includes(eventWithParent.parent1) || eventWithParent.parent1.includes(p.name)
+            );
+          }
+          if (!parent && eventWithParent.parent2) {
+            parent = Array.from(this.persons.values()).find(p => 
+              p.name === eventWithParent.parent2 || p.name.includes(eventWithParent.parent2) || eventWithParent.parent2.includes(p.name)
+            );
+          }
           if (parent && !parent.children.find(c => c.id === person.id)) {
             parent.children.push(person);
             person.parentId = parent.id;
@@ -204,6 +265,65 @@ class FamilyTree {
     }
     
     this.currentRoot = this.rootPerson;
+  }
+
+  getYear(dateStr) {
+    if (!dateStr || dateStr === '') return '';
+    
+    // If it's already just a year (4 digits), return it
+    if (/^\d{4}$/.test(dateStr.trim())) {
+      return dateStr.trim();
+    }
+    
+    // If it's in YYYY-MM-DD format, extract the year
+    const yearMatch = dateStr.match(/^(\d{4})/);
+    if (yearMatch) {
+      return yearMatch[1];
+    }
+    
+    // Fallback: try to find any 4-digit number
+    const anyYearMatch = dateStr.match(/\b(\d{4})\b/);
+    if (anyYearMatch) {
+      return anyYearMatch[1];
+    }
+    
+    return dateStr; // Return as-is if no year found
+  }
+
+  formatPartnerBirthDeath(partnerBirthDeath) {
+    if (!partnerBirthDeath || partnerBirthDeath === '') return '';
+    
+    // Format can be like "*27.05.1970", "†2019", "*1954", "1887–1918", etc.
+    // Extract all years and format them
+    
+    // Find all 4-digit years
+    const years = partnerBirthDeath.match(/\b(\d{4})\b/g);
+    if (!years || years.length === 0) {
+      return partnerBirthDeath; // Return as-is if no year found
+    }
+    
+    // Check for birth/death indicators
+    const hasBirth = partnerBirthDeath.includes('*');
+    const hasDeath = partnerBirthDeath.includes('†');
+    
+    // Check for date range (e.g., "1887–1918")
+    const hasRange = partnerBirthDeath.includes('–') || partnerBirthDeath.includes('-');
+    
+    if (hasRange && years.length >= 2) {
+      // Date range: show as "YYYY–YYYY"
+      return `${years[0]}–${years[years.length - 1]}`;
+    } else if (hasBirth && years.length > 0) {
+      // Birth date: show as "*YYYY"
+      return `*${years[0]}`;
+    } else if (hasDeath && years.length > 0) {
+      // Death date: show as "†YYYY"
+      return `†${years[0]}`;
+    } else if (years.length > 0) {
+      // Just a year: return the first year found
+      return years[0];
+    }
+    
+    return partnerBirthDeath;
   }
 
   convertExcelDate(excelDate) {
@@ -402,10 +522,10 @@ class FamilyTree {
           datesEl.className = 'fam-tree-search-result-dates';
           const parts = [];
           if (birthDate) {
-            parts.push(`* ${birthDate}`);
+            parts.push(`* ${this.getYear(birthDate)}`);
           }
           if (deathDate) {
-            parts.push(`† ${deathDate}`);
+            parts.push(`† ${this.getYear(deathDate)}`);
           }
           datesEl.textContent = `(${parts.join(' - ')})`;
           item.appendChild(datesEl);
@@ -654,10 +774,10 @@ class FamilyTree {
       datesEl.className = 'fam-tree-person-dates';
       const parts = [];
       if (birthDate) {
-        parts.push(`* ${birthDate}`);
+        parts.push(`* ${this.getYear(birthDate)}`);
       }
       if (deathDate) {
-        parts.push(`† ${deathDate}`);
+        parts.push(`† ${this.getYear(deathDate)}`);
       }
       datesEl.textContent = `(${parts.join(' - ')})`;
       personEl.appendChild(datesEl);
@@ -709,9 +829,9 @@ class FamilyTree {
       // Date range: start date - end date (if divorce exists)
       if (marriage.date) {
         if (marriage.divorceDate) {
-          parts.push(`${marriage.date} - ${marriage.divorceDate}`);
+          parts.push(`${this.getYear(marriage.date)} - ${this.getYear(marriage.divorceDate)}`);
         } else {
-          parts.push(marriage.date);
+          parts.push(this.getYear(marriage.date));
         }
       }
       
@@ -719,7 +839,7 @@ class FamilyTree {
         parts.push(marriage.partner);
       }
       if (marriage.partnerBirthDeath) {
-        parts.push(marriage.partnerBirthDeath);
+        parts.push(this.formatPartnerBirthDeath(marriage.partnerBirthDeath));
       }
       
       marriageEl.textContent = parts.join(' ');
@@ -737,7 +857,7 @@ class FamilyTree {
       
       const dateEl = document.createElement('span');
       dateEl.className = 'fam-tree-event-date';
-      dateEl.textContent = event.date || 'unbekannt';
+      dateEl.textContent = event.date ? this.getYear(event.date) : 'unbekannt';
       
       eventEl.appendChild(typeEl);
       eventEl.appendChild(dateEl);
@@ -864,10 +984,10 @@ class FamilyTree {
       datesEl.className = 'fam-tree-person-dates';
       const parts = [];
       if (birthDate) {
-        parts.push(`* ${birthDate}`);
+        parts.push(`* ${this.getYear(birthDate)}`);
       }
       if (deathDate) {
-        parts.push(`† ${deathDate}`);
+        parts.push(`† ${this.getYear(deathDate)}`);
       }
       datesEl.textContent = `(${parts.join(' - ')})`;
       personEl.appendChild(datesEl);
@@ -906,13 +1026,13 @@ class FamilyTree {
       
       const parts = [`H${index + 1}:`];
       if (marriage.date) {
-        parts.push(marriage.date);
+        parts.push(this.getYear(marriage.date));
       }
       if (marriage.partner) {
         parts.push(marriage.partner);
       }
       if (marriage.partnerBirthDeath) {
-        parts.push(marriage.partnerBirthDeath);
+        parts.push(this.formatPartnerBirthDeath(marriage.partnerBirthDeath));
       }
       
       marriageEl.textContent = parts.join(' ');
@@ -930,7 +1050,7 @@ class FamilyTree {
       
       const dateEl = document.createElement('span');
       dateEl.className = 'fam-tree-event-date';
-      dateEl.textContent = event.date || 'unbekannt';
+      dateEl.textContent = event.date ? this.getYear(event.date) : 'unbekannt';
       
       eventEl.appendChild(typeEl);
       eventEl.appendChild(dateEl);
