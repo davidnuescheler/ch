@@ -1,55 +1,47 @@
 import { loadCSS } from '../../scripts/aem.js';
 
 /**
- * Constructs URL for widget resources.
- * @param {string} widget - Widget name
- * @param {string} extension - File extension
- * @returns {string} Complete URL path to widget resource
- */
-function writeUrl(widget, extension) {
-  return `${window.hlx.codeBasePath}/widgets/${widget}/${widget}.${extension}`;
-}
-
-/**
- * Decorates widget element by loading HTML, CSS, and JS resources.
- * @param {HTMLElement} widget - Widget container element
- * @returns {Promise<void>} Promise that resolves when widget decoration is complete
- * @throws {Error} Logs errors to console if widget loading fails
+ * Loads JS and CSS for a block.
+ * @param {Element} widgetPath
  */
 export default async function decorate(widget) {
-  const source = widget.querySelector('a[href]');
-  const { pathname, searchParams } = new URL(source.href);
-  const pathSegments = pathname.split('/').filter((p) => p);
-  const widgetName = pathSegments[1]; // extract widget name (after '/widgets/')
+  const widgetEl = widget.querySelector('a');
+  const widgetUrl = widgetEl.href;
+  const parsedWidgetUrl = new URL(widgetUrl);
+  const pathSplit = widgetUrl.split('/');
+  const widgetName = pathSplit[pathSplit.length - 2];
 
   try {
-    // load and populate html
-    const resp = await fetch(writeUrl(widgetName, 'html'));
-    widget.innerHTML = await resp.text();
-
-    // load css asynchronously
-    const cssLoaded = loadCSS(writeUrl(widgetName, 'css'));
-
-    // load and execute js
-    const decorationComplete = (async () => {
-      const mod = await import(writeUrl(widgetName, 'js'));
-      if (mod.default) await mod.default(widget);
-    })();
-    await Promise.all([cssLoaded, decorationComplete]);
-
-    // apply widget styling and metadata
-    const wrapper = widget.closest('.widget-wrapper');
-    wrapper.classList.add(`${widgetName}-wrapper`);
-    const container = wrapper.closest('.widget-container');
-    container.classList.add(`${widgetName}-container`);
-    widget.classList.add(widgetName);
-    widget.dataset.source = source.href;
-    const params = new URLSearchParams(searchParams);
-    params.forEach((value, key) => {
-      widget.dataset[key] = value;
+    const resp = await fetch(`${window.hlx.codeBasePath}/widgets/${widgetName}/${widgetName}.html`);
+    const html = await resp.text();
+    widget.innerHTML = html;
+    const cssLoaded = loadCSS(`${window.hlx.codeBasePath}/widgets/${widgetName}/${widgetName}.css`);
+    const decorationComplete = new Promise((resolve) => {
+      (async () => {
+        try {
+          const mod = await import(
+            `${window.hlx.codeBasePath}/widgets/${widgetName}/${widgetName}.js`
+          );
+          if (mod.default) {
+            await mod.default(widget);
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.log(`failed to load module for ${widgetName}`, error);
+        }
+        resolve();
+      })();
     });
+    await Promise.all([cssLoaded, decorationComplete]);
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error(`Failed to load ${widgetName} widget:`, error);
+    console.log(`failed to load block ${widgetName}`, error);
+  }
+  widget.className = `widget ${widgetName}`;
+  widget.dataset.widgetUrl = widgetUrl;
+  const params = new URLSearchParams(parsedWidgetUrl.searchParams);
+  // eslint-disable-next-line no-restricted-syntax
+  for (const [key, value] of params.entries()) {
+    widget.dataset[key] = value;
   }
 }
