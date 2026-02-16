@@ -1026,8 +1026,10 @@ export default function decorate(block) {
   container.className = 'fam-tree-container';
   container.innerHTML = `
     <div class="fam-tree-controls">
-      <button class="fam-tree-btn" id="fam-tree-expand-all">Expand All</button>
-      <button class="fam-tree-btn" id="fam-tree-collapse-all">Collapse All</button>
+      <div class="fam-tree-search-wrapper">
+        <input type="text" class="fam-tree-search" id="fam-tree-search" placeholder="Suche nach Name...">
+        <div class="fam-tree-search-results" id="fam-tree-search-results"></div>
+      </div>
     </div>
     <div class="fam-tree-breadcrumb"></div>
     <div class="fam-tree-loading">Loading family tree...</div>

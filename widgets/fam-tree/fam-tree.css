@@ -18,6 +18,8 @@
   flex: 1;
   min-width: 250px;
   max-width: 400px;
+  display: block;
+  visibility: visible;
 }
 
 .fam-tree-search {
@@ -27,6 +29,9 @@
   border-radius: 4px;
   font-size: 14px;
   transition: border-color 0.2s;
+  display: block;
+  visibility: visible;
+  opacity: 1;
 }
 
 .fam-tree-search:focus {
